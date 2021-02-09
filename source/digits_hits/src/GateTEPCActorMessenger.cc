@@ -91,6 +91,16 @@ void GateTEPCActorMessenger::BuildCommands(G4String base)
   pSaveAsTextCmd = new G4UIcmdWithABool(bb, this);
   guidance = G4String("In addition to root output files, also write .txt files");
   pSaveAsTextCmd->SetGuidance(guidance);  
+  
+  bb = base +"/setSourceDirectionForBoxGeometry";
+  pSetSourceDirCmd = new G4UIcmdWithAString(bb,this);
+  guidance = G4String("Sets  averaging method ('DoseAveraged', 'TrackAveraged'). Default is 'DoseAveraged'.");
+  pSetSourceDirCmd->SetGuidance(guidance);
+  
+  bb = base+"/setOtherMaterial";
+  pSetOtherMaterialCmd = new G4UIcmdWithAString(bb, this);
+  guidance = G4String("Set Other Material Name");
+  pSetOtherMaterialCmd->SetGuidance(guidance);
 }
 //-----------------------------------------------------------------------------
 
@@ -106,6 +116,8 @@ void GateTEPCActorMessenger::SetNewValue(G4UIcommand* cmd, G4String newValue)
   if(cmd == pENOrdersCmd) pActor->SetENOrders(  pENOrdersCmd->GetNewIntValue(newValue)  );
   if(cmd == pNormByEventCmd) pActor->SetNormByEvent(  pNormByEventCmd->GetNewBoolValue(newValue)  );
   if(cmd == pSaveAsTextCmd) pActor->SetSaveAsText(  pSaveAsTextCmd->GetNewBoolValue(newValue)  ) ;
+  if (cmd == pSetSourceDirCmd) pActor->SetSourceDir(newValue);
+  if (cmd == pSetOtherMaterialCmd) pActor->SetMaterial(newValue);
   GateActorMessenger::SetNewValue(cmd,newValue);
 }
 //-----------------------------------------------------------------------------

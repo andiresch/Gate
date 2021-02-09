@@ -55,6 +55,8 @@ protected:
   G4UIcmdWithAnInteger      * pENOrdersCmd;
   G4UIcmdWithABool          * pNormByEventCmd;
   G4UIcmdWithABool          * pSaveAsTextCmd;
+  G4UIcmdWithAString 		* pSetSourceDirCmd; 
+  G4UIcmdWithAString 		* pSetOtherMaterialCmd; 
   
 }; // end class GateTEPCActorMessenger
 //-----------------------------------------------------------------------------

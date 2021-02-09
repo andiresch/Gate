@@ -13,8 +13,11 @@
 #include "GateMiscFunctions.hh"
 #include "GateObjectStore.hh"
 #include "GateSphere.hh"
+#include "GateCylinder.hh"
+#include "GateBox.hh"
 
 #include "G4NistManager.hh"
+#include <G4EmCalculator.hh>
 
 //-----------------------------------------------------------------------------
 /// Constructors (Prototype)
@@ -31,11 +34,14 @@ GateTEPCActor::GateTEPCActor(G4String name, G4int depth):
   mENOrders = 6;
   mNormByEvent = false;
   mSaveAsText = false;
-  
+  mSourceDirTEPC = "";
+  mSetMaterial = "";
+  mSetMaterialBool = false;
   newEvent = true;
   
   pMessenger = new GateTEPCActorMessenger(this);
   GateDebugMessageDec("Actor",4,"GateTEPCActor() -- end\n");
+  emcalc = new G4EmCalculator;
 }
 //-----------------------------------------------------------------------------
 
@@ -67,14 +73,20 @@ void GateTEPCActor::Construct()
 
   // Initialize ROOT histogram
   if(mEBinNumber < 1) { GateError("Error in " << GetName() << ": energy spectrum bin number is < 1"); }
-
+  // in case stopping power of other material is selected
+  if (!mSetMaterial.empty()){
+	  mSetMaterialBool = true;
+    G4cout << "Build material: " << mSetMaterial << G4endl;
+	G4NistManager::Instance()->FindOrBuildMaterial(mSetMaterial);
+	
+    mSaveFilename= removeExtension(mSaveFilename) + "-letTo" + mSetMaterial + "."+ getExtension(mSaveFilename);
+  }
   pTfile = new TFile(mSaveFilename,"RECREATE");
   
   mEmin /= keV;
   mEmax /= keV;
   
-  if(mELogscale)
-  {
+  if(mELogscale){
     if(mEmin <= 0.0) { GateError("Error in " << GetName() << ": When using logscale, Emin value must be > 0"); }
 
     // Initialize bin width according to a log scale
@@ -87,9 +99,7 @@ void GateTEPCActor::Construct()
     }
     pLETspectrum = new TH1D("f","f(y) distribution", mEBinNumber, binEnergy);
     delete [] binEnergy;
-  }
-  else
-  {
+  } else {
     // Initialize bin width according to a linear scale
     pLETspectrum = new TH1D("f","f(y) distribution", mEBinNumber, mEmin, mEmax);
   }
@@ -102,12 +112,45 @@ void GateTEPCActor::Construct()
   
   // Calculation of the effective chord of the TEPC
   // WARNING : the attached volume MUST be a GateSphere
-  GateMessage("Actor",0, "WARNING: For now, only spherical volumes are compatible with the TEPCactor. Please check that the attached volume is a 'sphere'." << G4endl);
-  effectiveChord = (2.0 / 3.0) * 2.0 * ((GateSphere *)GetVolume())->GetSphereRmax()  * GetVolume()->GetMaterial()->GetDensity() / (g/cm3); // tested by A.Resch 29thOct2020: works and is correct
-  G4cout<<"Effective chord length mm: " << effectiveChord<<G4endl;
-  G4cout<<"Effective chord length um: "<< (effectiveChord / um)<<G4endl;
-  G4cout<<"Radius Sphere: " << ((GateSphere *)GetVolume())->GetSphereRmax() <<G4endl;
-  G4cout<<"Density: " << GetVolume()->GetMaterial()->GetDensity()/ (g/cm3) <<G4endl;
+  GateMessage("Actor",0, "WARNING: Only spherical, cylindrical or rectangular volumes are compatible with the TEPCactor. Please check that the attached volume is either a 'sphere', 'cylinder' or 'box'." << G4endl);
+  G4String str1 = mVolume->GetLogicalVolume()->GetSolid()->GetEntityType();
+  G4cout<<"=========================== get entity type "<< str1 <<G4endl;
+  // G4cout<<"=========================== get entity type "<<mVolume->GetLogicalVolume()->GetSolid()->GetSphereRmax()<<G4endl;
+  if (str1.compare("G4Sphere") == 0){
+		effectiveChord = (2.0 / 3.0) * 2.0 * ((GateSphere *)GetVolume())->GetSphereRmax()  * GetVolume()->GetMaterial()->GetDensity() / (g/cm3); // tested by A.Resch 29thOct2020: works and is correct
+		G4cout<<"Effective chord length mm: " << effectiveChord<<G4endl;
+		G4cout<<"Effective chord length um: "<< (effectiveChord / um)<<G4endl;
+		G4cout<<"Radius Sphere: " << ((GateSphere *)GetVolume())->GetSphereRmax()<<G4endl;
+		G4cout<<"Density: " << GetVolume()->GetMaterial()->GetDensity() / (g/cm3)<<G4endl;
+		G4cout<<"==========================="<<mVolume->GetObjectName()<<G4endl;
+		//G4cout<<"=========================== get entity type "<<mVolume->GetLogicalVolume()->GetSolid()->GetEntityType()<<G4endl; //<< GetEntityType()
+  } 
+  if (str1.compare("G4Tubs") == 0){
+		effectiveChord = (3.14159265 / 4.0) * 2.0 * ((GateCylinder *)GetVolume())->GetCylinderRmax()  * GetVolume()->GetMaterial()->GetDensity() / (g/cm3);
+		G4cout<<"Effective chord length mm: " << effectiveChord<<G4endl;
+		G4cout<<"Effective chord length um: "<< (effectiveChord / um)<<G4endl;
+		G4cout<<"Radius Cylinder: " << ((GateCylinder *)GetVolume())->GetCylinderRmax()<<G4endl;
+		G4cout<<"Density: " << GetVolume()->GetMaterial()->GetDensity() / (g/cm3)<<G4endl;
+		G4cout<<"==========================="<<mVolume->GetObjectName()<<G4endl;
+  }
+  if (str1.compare("G4Box") == 0){
+		if (mSourceDirTEPC.compare("x") == 0){
+			effectiveChord = 2.0 * ((GateBox *)GetVolume())-> GetBoxXHalfLength() * GetVolume()->GetMaterial()->GetDensity() / (g/cm3); 
+			G4cout<<"Thickness Slab: " << 2 * ((GateBox *)GetVolume())-> GetBoxXHalfLength()<<G4endl;
+		} else if (mSourceDirTEPC.compare("y") == 0){
+			effectiveChord = 2.0 * ((GateBox *)GetVolume())-> GetBoxYHalfLength() * GetVolume()->GetMaterial()->GetDensity() / (g/cm3); 
+			G4cout<<"Thickness Slab: " << 2 * ((GateBox *)GetVolume())-> GetBoxYHalfLength()<<G4endl;
+		} else if (mSourceDirTEPC.compare("z") == 0){
+			effectiveChord = 2.0 * ((GateBox *)GetVolume())-> GetBoxZHalfLength() * GetVolume()->GetMaterial()->GetDensity() / (g/cm3); 
+			G4cout<<"Thickness Slab: " << 2 * ((GateBox *)GetVolume())-> GetBoxZHalfLength()<<G4endl;
+		}
+		G4cout<<"Beam Direction: "<< mSourceDirTEPC<<G4endl;
+		G4cout<<"Effective chord length mm: " << effectiveChord<<G4endl;
+		G4cout<<"Effective chord length um: "<< (effectiveChord / um)<<G4endl;
+		G4cout<<"Density: " << GetVolume()->GetMaterial()->GetDensity() / (g/cm3)<<G4endl;
+		G4cout<<"==========================="<<mVolume->GetObjectName()<<G4endl;
+  }
+
 }
 //-----------------------------------------------------------------------------
 
@@ -162,8 +205,8 @@ void GateTEPCActor::SaveData()
     std::ofstream oss;
     OpenFileOutput(filename, oss);
 
-    // write as text file with header and 3 columns: 1) energy[keV] 2) binWidth[keV] 3) frequency
-    oss << "energy[keV] binWidth[keV] frequency" << std::endl;
+    // write as text file with header and 3 columns: 1) linealEnergy[keV] 2) binWidth[keV] 3) frequency
+    oss << "linealEnergy[keV] binWidth[keV] frequency" << std::endl;
     int binFirst = pLETspectrum->GetXaxis()->GetFirst();
     int binLast  = pLETspectrum->GetXaxis()->GetLast();
     for(int i=binFirst; i<=binLast; i++)
@@ -242,7 +285,30 @@ void GateTEPCActor::PostUserTrackingAction(const GateVVolume *, const G4Track *)
 //-----------------------------------------------------------------------------
 void GateTEPCActor::UserSteppingAction(const GateVVolume *, const G4Step *step)
 {
-  edepByEvent += step->GetTotalEnergyDeposit();
+  G4double edep	= step->GetTotalEnergyDeposit();
+    //if no energy is deposited or energy is deposited outside image => do nothing
+  if (edep == 0) {
+    GateDebugMessage("Actor", 5, "GateTEPCActor edep == 0 : do nothing\n");
+    return;
+  }
+  if (mSetMaterialBool){
+	const G4Material* material = step->GetPreStepPoint()->GetMaterial();//->GetName();
+	G4double energy1 = step->GetPreStepPoint()->GetKineticEnergy();
+	G4double energy2 = step->GetPostStepPoint()->GetKineticEnergy();
+	G4double energy=(energy1+energy2)/2;
+	const G4ParticleDefinition* partname = step->GetTrack()->GetDefinition();//->GetParticleName();
+	G4double dedx = emcalc->ComputeElectronicDEDX(energy, partname, material);
+	G4double SPR_ToOtherMaterial =1.0;
+    G4double dedx_OtherMaterial = emcalc->ComputeElectronicDEDX(energy, partname->GetParticleName(), mSetMaterial) ;   
+    //G4cout<<"part name: "<<partname->GetParticleName()<< G4endl<< G4endl;
+    if ((dedx > 0) && (dedx_OtherMaterial >0 ))
+    {
+        SPR_ToOtherMaterial = dedx_OtherMaterial/dedx;
+        edep *=SPR_ToOtherMaterial;
+        //dedx *=SPR_ToOtherMaterial;
+    }
+  }
+    edepByEvent += edep ; //step->GetTotalEnergyDeposit();
 }
 //-----------------------------------------------------------------------------
 

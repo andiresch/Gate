@@ -28,6 +28,8 @@
 #ifndef GATETEPCACTOR_HH
 #define GATETEPCACTOR_HH
 
+#include <G4NistManager.hh>
+class G4EmCalculator;
 #include "GateVActor.hh"
 #include "GateActorMessenger.hh"
 #include "GateDiscreteSpectrum.hh"
@@ -90,6 +92,9 @@ public:
   void SetENOrders(int v) { mENOrders = v; }
   void SetNormByEvent(bool v) { mNormByEvent = v; }
   void SetSaveAsText(bool v) { mSaveAsText = v; }
+  
+  void SetSourceDir(G4String s) { mSourceDirTEPC = s; }
+  void SetMaterial(G4String s) { mSetMaterial = s; }
 
 protected:
   GateTEPCActor(G4String name, G4int depth=0);
@@ -107,6 +112,9 @@ protected:
   int mENOrders;
   bool mNormByEvent;
   bool mSaveAsText;
+  G4String mSourceDirTEPC;
+  G4String mSetMaterial;
+  bool mSetMaterialBool;
   
   // Temporary parameters
   int eventNumber;
@@ -115,6 +123,8 @@ protected:
   double effectiveChord;
   
   GateActorMessenger* pMessenger;
+  
+  G4EmCalculator * emcalc;
 
 
 };
